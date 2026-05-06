@@ -10,6 +10,9 @@ public class PlayerController : MonoBehaviour
     public float dashCooldown = 1f;
     public float fallGravityMultiplier = 20f;
 
+    [Header("Animación")]
+    [SerializeField] private Animator animator;
+
     [Header("Ground Check")]
     public Transform groundCheck;
     public float groundRadius = 0.2f;
@@ -26,6 +29,8 @@ public class PlayerController : MonoBehaviour
         rb = GetComponent<Rigidbody>();
         rb.freezeRotation = true;
         cam = Camera.main;
+        if (animator == null)
+            animator = GetComponentInChildren<Animator>();
     }
 
     void Update()
@@ -33,10 +38,15 @@ public class PlayerController : MonoBehaviour
         isGrounded = Physics.CheckSphere(groundCheck.position, groundRadius, groundLayer);
 
         if (Input.GetButtonDown("Jump") && isGrounded)
+        {
             rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            if (animator != null) animator.SetTrigger("Jump");
+        }
 
         if (Input.GetKeyDown(KeyCode.LeftShift) && canDash)
             StartCoroutine(Dash());
+
+        UpdateAnimations();
     }
 
     void FixedUpdate()
@@ -60,6 +70,17 @@ public class PlayerController : MonoBehaviour
         Vector3 targetVelocity = moveDir * moveSpeed;
         targetVelocity.y = rb.linearVelocity.y;
         rb.linearVelocity = targetVelocity;
+    }
+
+    void UpdateAnimations()
+    {
+        if (animator == null) return;
+        float speed = new Vector2(rb.linearVelocity.x, rb.linearVelocity.z).magnitude;
+        bool sprinting = Input.GetKey(KeyCode.LeftShift);
+        animator.SetFloat("Speed", speed);
+        animator.SetBool("IsSprinting", sprinting && speed > 0.1f);
+        animator.SetBool("IsGrounded", isGrounded);
+        animator.SetBool("IsDashing", isDashing);
     }
 
     System.Collections.IEnumerator Dash()

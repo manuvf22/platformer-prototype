@@ -1,94 +1,167 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.UI;
 using TMPro;
 
+/// <summary>
+/// Controla toda la UI del juego:
+/// - Panel de inicio
+/// - HUD (timer, monedas, tinta, modo construccion)
+/// - Panel de pausa
+/// - Panel de nivel completado
+/// 
+/// Todos los campos se asignan en el Inspector arrastrando los objetos de la jerarquia.
+/// </summary>
 public class UIManager : MonoBehaviour
 {
-    public static UIManager Instance { get; private set; }
+    public static UIManager Instance;
 
-    [Header("Main Menu")]
-    [SerializeField] private GameObject mainMenuPanel;
-    [SerializeField] private Button playButton;
-    [SerializeField] private Button quitButton;
+    // -----------------------------------------------------------------------
+    [Header("Paneles Principales")]
+    public GameObject startPanel;
+    public GameObject pausePanel;
+    public GameObject levelCompletePanel;
+    public GameObject hudPanel;
 
-    [Header("Pause")]
-    [SerializeField] private GameObject pausePanel;
-    [SerializeField] private Button resumeButton;
-    [SerializeField] private Button pauseMenuButton;
+    // -----------------------------------------------------------------------
+    [Header("HUD - Elementos")]
+    [Tooltip("Texto del timer, ej: 01:23")]
+    public TextMeshProUGUI timerText;
 
-    [Header("Game Over")]
-    [SerializeField] private GameObject gameOverPanel;
-    [SerializeField] private Button retryButton;
-    [SerializeField] private Button gameOverMenuButton;
+    [Tooltip("Texto de monedas, ej: Monedas: 3/10")]
+    public TextMeshProUGUI coinsText;
 
-    [Header("Level Complete")]
-    [SerializeField] private GameObject levelCompletePanel;
-    [SerializeField] private Button nextLevelButton;
-    [SerializeField] private Button completeMenuButton;
+    [Tooltip("Slider de barra de tinta")]
+    public Slider inkSlider;
 
+    [Tooltip("Texto con valor numerico de tinta")]
+    public TextMeshProUGUI inkValueText;
+
+    [Tooltip("Texto que dice 'MODO CONSTRUCCION' cuando esta activo")]
+    public TextMeshProUGUI buildModeText;
+
+    [Tooltip("Panel/botonera con los tipos de estructura disponibles")]
+    public GameObject buildUIPanel;
+
+    [Tooltip("Mensaje 'Tinta insuficiente!' que aparece brevemente")]
+    public TextMeshProUGUI noInkMessageText;
+
+    // -----------------------------------------------------------------------
+    [Header("Panel Nivel Completado")]
+    public TextMeshProUGUI completionTimeText;
+    public TextMeshProUGUI inkSpentText;
+    public TextMeshProUGUI coinsResultText;
+
+    // -----------------------------------------------------------------------
+    private Coroutine _noInkCoroutine;
+
+    // -----------------------------------------------------------------------
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
         Instance = this;
     }
 
     private void Start()
     {
-        if (playButton != null) playButton.onClick.AddListener(OnPlay);
-        if (quitButton != null) quitButton.onClick.AddListener(OnQuit);
-        if (resumeButton != null) resumeButton.onClick.AddListener(OnResume);
-        if (pauseMenuButton != null) pauseMenuButton.onClick.AddListener(OnMenu);
-        if (retryButton != null) retryButton.onClick.AddListener(OnRetry);
-        if (gameOverMenuButton != null) gameOverMenuButton.onClick.AddListener(OnMenu);
-        if (nextLevelButton != null) nextLevelButton.onClick.AddListener(OnRetry); // same scene for now
-        if (completeMenuButton != null) completeMenuButton.onClick.AddListener(OnMenu);
-
-        // Initial state
-        ShowAll(false);
-        if (mainMenuPanel != null) mainMenuPanel.SetActive(true);
+        HideAll();
     }
 
-    private void ShowAll(bool show)
+    // -----------------------------------------------------------------------
+    // METODOS DE NAVEGACION DE PANELES
+
+    private void HideAll()
     {
-        if (mainMenuPanel != null) mainMenuPanel.SetActive(show);
-        if (pausePanel != null) pausePanel.SetActive(show);
-        if (gameOverPanel != null) gameOverPanel.SetActive(show);
-        if (levelCompletePanel != null) levelCompletePanel.SetActive(show);
+        startPanel.SetActive(false);
+        pausePanel.SetActive(false);
+        levelCompletePanel.SetActive(false);
+        hudPanel.SetActive(false);
+        buildUIPanel.SetActive(false);
+
+        if (noInkMessageText) noInkMessageText.gameObject.SetActive(false);
+        if (buildModeText)    buildModeText.text = "";
     }
 
-    public void ShowMainMenu(bool show)
+    /// <summary>Mostrar pantalla de inicio (antes de que empiece el nivel).</summary>
+    public void ShowStartPanel()
     {
-        if (mainMenuPanel != null) mainMenuPanel.SetActive(show);
+        HideAll();
+        startPanel.SetActive(true);
     }
 
-    public void ShowPause(bool show)
+    /// <summary>Mostrar HUD normal durante el juego.</summary>
+    public void ShowHUD()
     {
-        if (pausePanel != null) pausePanel.SetActive(show);
+        HideAll();
+        hudPanel.SetActive(true);
     }
 
-    public void ShowGameOver()
+    /// <summary>Mostrar u ocultar panel de pausa (mantiene el HUD visible debajo).</summary>
+    public void ShowPausePanel(bool show)
     {
-        ShowAll(false);
-        if (gameOverPanel != null) gameOverPanel.SetActive(true);
-        if (SoundManager.Instance != null) SoundManager.Instance.PlayGameOver();
+        pausePanel.SetActive(show);
     }
 
-    public void ShowLevelComplete()
+    /// <summary>Mostrar pantalla de nivel completado con estadisticas.</summary>
+    public void ShowLevelComplete(float time, float inkSpent, int coins, int totalCoins)
     {
-        ShowAll(false);
-        if (levelCompletePanel != null) levelCompletePanel.SetActive(true);
-        if (SoundManager.Instance != null) SoundManager.Instance.PlayLevelComplete();
+        HideAll();
+        levelCompletePanel.SetActive(true);
+
+        // Formatear tiempo como MM:SS
+        int minutes = Mathf.FloorToInt(time / 60f);
+        int seconds = Mathf.FloorToInt(time % 60f);
+        completionTimeText.text = $"Tiempo: {minutes:00}:{seconds:00}";
+
+        inkSpentText.text    = $"Tinta gastada: {inkSpent:F0}";
+        coinsResultText.text = $"Monedas: {coins}/{totalCoins}";
     }
 
-    private void OnPlay() => GameManager.Instance?.StartGame();
-    private void OnResume() => GameManager.Instance?.ResumeGame();
-    private void OnRetry() => GameManager.Instance?.RestartGame();
-    private void OnMenu() => GameManager.Instance?.GoToMainMenu();
-    private void OnQuit()
+    // -----------------------------------------------------------------------
+    // METODOS DE ACTUALIZACION DEL HUD
+
+    public void UpdateTimer(float time)
     {
-        Application.Quit();
-#if UNITY_EDITOR
-        UnityEditor.EditorApplication.isPlaying = false;
-#endif
+        int minutes = Mathf.FloorToInt(time / 60f);
+        int seconds = Mathf.FloorToInt(time % 60f);
+        if (timerText) timerText.text = $"{minutes:00}:{seconds:00}";
+    }
+
+    public void UpdateCoins(int collected, int total)
+    {
+        if (coinsText) coinsText.text = $"Monedas: {collected}/{total}";
+    }
+
+    public void UpdateInk(float current, float max)
+    {
+        if (inkSlider)    inkSlider.value    = max > 0 ? current / max : 0f;
+        if (inkValueText) inkValueText.text  = $"Tinta: {current:F0}/{max:F0}";
+    }
+
+    // -----------------------------------------------------------------------
+    // CONSTRUCCION
+
+    /// <summary>Activa o desactiva la UI del modo construccion.</summary>
+    public void ShowBuildUI(bool show)
+    {
+        buildUIPanel.SetActive(show);
+        if (buildModeText)
+            buildModeText.text = show ? "[ MODO CONSTRUCCION ]" : "";
+    }
+
+    /// <summary>Muestra brevemente el mensaje de tinta insuficiente.</summary>
+    public void ShowNotEnoughInk()
+    {
+        if (_noInkCoroutine != null) StopCoroutine(_noInkCoroutine);
+        _noInkCoroutine = StartCoroutine(NotEnoughInkRoutine());
+    }
+
+    private IEnumerator NotEnoughInkRoutine()
+    {
+        if (noInkMessageText)
+        {
+            noInkMessageText.gameObject.SetActive(true);
+            yield return new WaitForSeconds(1.5f);
+            noInkMessageText.gameObject.SetActive(false);
+        }
     }
 }

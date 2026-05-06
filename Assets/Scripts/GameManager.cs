@@ -1,96 +1,110 @@
 using UnityEngine;
 using UnityEngine.SceneManagement;
 
+/// <summary>
+/// Maneja el estado general del juego: tiempo, monedas, tinta gastada y transiciones de UI.
+/// Es un Singleton accesible desde cualquier script con GameManager.Instance.
+/// </summary>
 public class GameManager : MonoBehaviour
 {
-    public static GameManager Instance { get; private set; }
+    public static GameManager Instance;
 
-    public enum GameState { MainMenu, Playing, Paused, GameOver, LevelComplete }
-    public GameState CurrentState { get; private set; } = GameState.MainMenu;
+    [Header("Configuracion del Nivel")]
+    [Tooltip("Cantidad total de monedas que hay en el nivel (contar a mano en el inspector)")]
+    public int totalCoins = 0;
 
-    [Header("References")]
-    [SerializeField] private PlayerController playerController;
-    [SerializeField] private LevelManager levelManager;
-    [SerializeField] private UIManager uiManager;
-    [SerializeField] private HUDManager hudManager;
-    [SerializeField] private SoundManager soundManager;
+    // --- Estado interno ---
+    private int   _coinsCollected = 0;
+    private float _inkSpent       = 0f;
+    private float _timer          = 0f;
+    private bool  _levelActive    = false;
+    private bool  _isPaused       = false;
 
+    // --- Propiedades publicas de solo lectura ---
+    public bool IsGamePaused  => _isPaused;
+    public bool IsLevelActive => _levelActive;
+
+    // -----------------------------------------------------------------------
     private void Awake()
     {
-        if (Instance != null && Instance != this) { Destroy(gameObject); return; }
-        Instance = this;
+        // Patron Singleton: solo puede existir una instancia
+        if (Instance == null) Instance = this;
+        else { Destroy(gameObject); return; }
     }
 
     private void Start()
     {
-        SetState(GameState.MainMenu);
-        if (uiManager != null) uiManager.ShowMainMenu(true);
-        if (hudManager != null) hudManager.ShowHUD(false);
+        // El juego arranca pausado mostrando el panel de inicio
+        Time.timeScale = 0f;
+        UIManager.Instance.ShowStartPanel();
     }
 
     private void Update()
     {
-        if (CurrentState == GameState.Playing && Input.GetKeyDown(KeyCode.Escape))
-            PauseGame();
-        else if (CurrentState == GameState.Paused && Input.GetKeyDown(KeyCode.Escape))
-            ResumeGame();
+        // Solo contar tiempo si el nivel esta activo y no pausado
+        if (!_levelActive || _isPaused) return;
+
+        _timer += Time.deltaTime;
+        UIManager.Instance.UpdateTimer(_timer);
+
+        // Tecla Escape para pausar/despausar
+        if (Input.GetKeyDown(KeyCode.Escape))
+            TogglePause();
     }
 
-    public void StartGame()
+    // -----------------------------------------------------------------------
+    // METODOS PUBLICOS
+
+    /// <summary>Llamado desde el boton "Jugar" del panel de inicio.</summary>
+    public void StartLevel()
     {
-        SetState(GameState.Playing);
+        _levelActive = true;
+        _isPaused    = false;
         Time.timeScale = 1f;
-        if (playerController != null) playerController.EnableInput(true);
-        if (levelManager != null) levelManager.InitLevel();
-        if (hudManager != null) hudManager.ShowHUD(true);
-        if (uiManager != null) uiManager.ShowMainMenu(false);
+        UIManager.Instance.ShowHUD();
     }
 
-    public void PauseGame()
+    /// <summary>Alterna entre pausado y corriendo.</summary>
+    public void TogglePause()
     {
-        if (CurrentState != GameState.Playing) return;
-        SetState(GameState.Paused);
+        _isPaused = !_isPaused;
+        Time.timeScale = _isPaused ? 0f : 1f;
+        UIManager.Instance.ShowPausePanel(_isPaused);
+    }
+
+    /// <summary>Llamado cuando el jugador recoge una moneda.</summary>
+    public void AddCoin()
+    {
+        _coinsCollected++;
+        UIManager.Instance.UpdateCoins(_coinsCollected, totalCoins);
+    }
+
+    /// <summary>Llamado desde BuildingSystem cada vez que se construye.</summary>
+    public void AddInkSpent(float amount)
+    {
+        _inkSpent += amount;
+    }
+
+    /// <summary>Llamado cuando el jugador llega a la salida del nivel.</summary>
+    public void CompleteLevel()
+    {
+        if (!_levelActive) return;
+        _levelActive = false;
         Time.timeScale = 0f;
-        if (uiManager != null) uiManager.ShowPause(true);
+        UIManager.Instance.ShowLevelComplete(_timer, _inkSpent, _coinsCollected, totalCoins);
     }
 
-    public void ResumeGame()
-    {
-        if (CurrentState != GameState.Paused) return;
-        SetState(GameState.Playing);
-        Time.timeScale = 1f;
-        if (uiManager != null) uiManager.ShowPause(false);
-    }
-
-    public void GameOver()
-    {
-        if (CurrentState == GameState.GameOver) return;
-        SetState(GameState.GameOver);
-        if (playerController != null) playerController.EnableInput(false);
-        if (uiManager != null) uiManager.ShowGameOver();
-        if (hudManager != null) hudManager.ShowHUD(false);
-    }
-
-    public void LevelComplete()
-    {
-        if (CurrentState == GameState.LevelComplete) return;
-        SetState(GameState.LevelComplete);
-        if (playerController != null) playerController.EnableInput(false);
-        if (uiManager != null) uiManager.ShowLevelComplete();
-        if (hudManager != null) hudManager.ShowHUD(false);
-    }
-
-    public void RestartGame()
+    /// <summary>Reinicia la escena actual.</summary>
+    public void RestartLevel()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        SceneManager.LoadScene(SceneManager.GetActiveScene().buildIndex);
     }
 
-    public void GoToMainMenu()
+    /// <summary>Vuelve al menu principal (escena 0).</summary>
+    public void GoToMenu()
     {
         Time.timeScale = 1f;
-        SceneManager.LoadScene(SceneManager.GetActiveScene().name);
+        SceneManager.LoadScene(0);
     }
-
-    private void SetState(GameState state) => CurrentState = state;
 }

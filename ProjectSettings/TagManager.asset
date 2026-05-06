@@ -4,8 +4,8 @@
 TagManager:
   serializedVersion: 3
   tags:
-  - Eraser
-  - Painted
+  - DeathZone
+  - Enemy
   layers:
   - Default
   - TransparentFX
@@ -13,8 +13,8 @@ TagManager:
   - Ground
   - Water
   - UI
-  - Paintable
-  - Painted
+  - 
+  - 
   - 
   - 
   - 
@@ -45,15 +45,6 @@ TagManager:
     locked: 0
   - name: Ground
     uniqueID: 3756130111
-    locked: 0
-  - name: Paintable
-    uniqueID: 152561949
-    locked: 0
-  - name: Unpaintable
-    uniqueID: 3805519641
-    locked: 0
-  - name: Painted
-    uniqueID: 3282975809
     locked: 0
   m_RenderingLayers:
   - Default

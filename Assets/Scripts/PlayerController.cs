@@ -1,114 +1,214 @@
 using UnityEngine;
 
-/// <summary>
-/// Controla el movimiento del jugador: caminar, saltar y dash.
-/// Requiere un CharacterController en el mismo GameObject.
-/// </summary>
-[RequireComponent(typeof(CharacterController))]
+[RequireComponent(typeof(Rigidbody))]
+[RequireComponent(typeof(CapsuleCollider))]
 public class PlayerController : MonoBehaviour
 {
     [Header("Movimiento")]
     public float moveSpeed = 10f;
-    public float rotationSpeed = 22f;   // Rotacion rapida = se siente agil
+    public float acceleration = 60f;
+    public float groundDrag = 8f;
+    public float rotationSpeed = 15f;
 
     [Header("Salto")]
-    public float jumpHeight = 3.5f;
-    public float gravity = -30f;  // Gravedad alta = caida rapida = se siente responsivo
+    public float jumpForce = 8f;
+    public float fallGravityMultiplier = 2.5f;
 
     [Header("Coyote Time")]
-    [Tooltip("Segundos que tenes para saltar despues de caerte de una plataforma")]
-    public float coyoteTime = 0.15f;
+    public float coyoteTime = 0.12f;
 
     [Header("Dash")]
-    public float dashDistance = 7f;
+    public float dashForce = 20f;
     public float dashDuration = 0.12f;
     public float dashCooldown = 1f;
 
+    [Header("Deteccion de Suelo")]
+    public LayerMask groundMask = ~0;
+    public float groundCheckRadius = 0.3f;
+    public float groundCheckDistance = 0.1f;
+
     // --- Referencias ---
-    private CharacterController _cc;
+    private Rigidbody _rb;
+    private CapsuleCollider _col;
     private Animator _animator;
     private Camera _cam;
 
     // --- Estado ---
-    private Vector3 _velocity;
+    private bool _isGrounded;
     private bool _isDashing;
     private float _dashTimer;
     private float _dashCooldownTimer;
-    private Vector3 _dashDir;
-    private float _coyoteTimer;       // Cuenta regresiva del coyote time
+    private float _coyoteTimer;
+    private Vector3 _moveDir;
+
+    // --- Buffers de input ---
+    private bool _jumpBuffered;
+    private bool _dashBuffered;
 
     // -----------------------------------------------------------------------
     private void Awake()
     {
-        _cc = GetComponent<CharacterController>();
-        _animator = GetComponent<Animator>();
+        _rb = GetComponent<Rigidbody>();
+        _col = GetComponent<CapsuleCollider>();
+        _animator = GetComponentInChildren<Animator>();
         _cam = Camera.main;
-    }
 
-    private void Update()
-    {
-        if (GameManager.Instance.IsGamePaused || !GameManager.Instance.IsLevelActive) return;
+        if (_cam == null)
+            Debug.LogError("[PlayerController] Camera.main es null. Asegurate que la camara tenga el tag MainCamera.");
 
-        HandleMovement();
-        HandleJump();
-        HandleDash();
-        ApplyGravity();
+        _rb.freezeRotation = true;
+        _rb.interpolation = RigidbodyInterpolation.Interpolate;
+        _rb.collisionDetectionMode = CollisionDetectionMode.Continuous;
     }
 
     // -----------------------------------------------------------------------
-    private void HandleMovement()
+    private void Update()
     {
+        // Input se lee SIEMPRE antes del guard (GetKeyDown no depende del timeScale)
+        if (Input.GetKeyDown(KeyCode.Space)) _jumpBuffered = true;
+        if (Input.GetKeyDown(KeyCode.LeftShift)) _dashBuffered = true;
+
+        // Guard: juego pausado o inactivo → limpiar buffers y salir
+        if (GameManager.Instance == null ||
+            GameManager.Instance.IsGamePaused ||
+            !GameManager.Instance.IsLevelActive)
+        {
+            _jumpBuffered = false;
+            _dashBuffered = false;
+            return;
+        }
+
+        CheckGround();
+        ReadInput();
+        HandleJump();
+        HandleDash();
+        LimitSpeed();
+        UpdateAnimator();
+    }
+
+    private void FixedUpdate()
+    {
+        if (GameManager.Instance == null ||
+            GameManager.Instance.IsGamePaused ||
+            !GameManager.Instance.IsLevelActive)
+            return;
+
+        ApplyMovement();
+        ApplyExtraGravity();
+    }
+
+    // -----------------------------------------------------------------------
+    // DETECCION DE SUELO
+
+    private void CheckGround()
+    {
+        if (_col == null) return;
+
+        // Origen del SphereCast: centro inferior del capsule
+        Vector3 sphereOrigin = transform.position + Vector3.up * _col.radius;
+
+        _isGrounded = Physics.SphereCast(
+            sphereOrigin,
+            groundCheckRadius,
+            Vector3.down,
+            out _,
+            groundCheckDistance + _col.radius * 0.1f,
+            groundMask,
+            QueryTriggerInteraction.Ignore
+        );
+
+        if (_isGrounded) _coyoteTimer = coyoteTime;
+        else _coyoteTimer -= Time.deltaTime;
+
+        // Drag alto en suelo para frenar con inercia, bajo en el aire
+        _rb.linearDamping = _isGrounded && !_isDashing ? groundDrag : 0.5f;
+
+        if (_animator != null) _animator.SetBool("IsGrounded", _isGrounded);
+    }
+
+    // -----------------------------------------------------------------------
+    // LEER INPUT DE MOVIMIENTO
+
+    private void ReadInput()
+    {
+        if (_cam == null) { _cam = Camera.main; return; }
+
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
 
         Vector3 camForward = _cam.transform.forward;
         Vector3 camRight = _cam.transform.right;
-        camForward.y = 0f;
-        camRight.y = 0f;
-        camForward.Normalize();
-        camRight.Normalize();
+        camForward.y = 0f; camForward.Normalize();
+        camRight.y = 0f; camRight.Normalize();
 
-        Vector3 moveDir = (camForward * v + camRight * h).normalized;
-
-        if (!_isDashing && moveDir.magnitude > 0.1f)
-        {
-            _cc.Move(moveDir * moveSpeed * Time.deltaTime);
-
-            Quaternion targetRot = Quaternion.LookRotation(moveDir);
-            transform.rotation = Quaternion.Slerp(transform.rotation, targetRot,
-                rotationSpeed * Time.deltaTime);
-        }
-
-        if (_animator != null) _animator.SetFloat("Speed", moveDir.magnitude);
+        _moveDir = (camForward * v + camRight * h).normalized;
     }
 
     // -----------------------------------------------------------------------
+    // MOVIMIENTO CON INERCIA (FixedUpdate)
+
+    private void ApplyMovement()
+    {
+        if (_isDashing || _moveDir.magnitude < 0.1f) return;
+
+        // Menos control en el aire para que se sienta con inercia
+        float control = _isGrounded ? 1f : 0.4f;
+        _rb.AddForce(_moveDir * acceleration * control, ForceMode.Acceleration);
+
+        // Rotar hacia la direccion de movimiento
+        Quaternion targetRot = Quaternion.LookRotation(_moveDir);
+        transform.rotation = Quaternion.Slerp(transform.rotation, targetRot,
+                                              rotationSpeed * Time.fixedDeltaTime);
+    }
+
+    // -----------------------------------------------------------------------
+    // LIMITAR VELOCIDAD HORIZONTAL
+
+    private void LimitSpeed()
+    {
+        if (_isDashing) return;
+
+        Vector3 flatVel = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+        if (flatVel.magnitude > moveSpeed)
+        {
+            Vector3 clamped = flatVel.normalized * moveSpeed;
+            _rb.linearVelocity = new Vector3(clamped.x, _rb.linearVelocity.y, clamped.z);
+        }
+    }
+
+    // -----------------------------------------------------------------------
+    // GRAVEDAD EXTRA EN CAIDA (caida mas pesada y satisfactoria)
+
+    private void ApplyExtraGravity()
+    {
+        if (!_isGrounded && _rb.linearVelocity.y < 0f)
+            _rb.AddForce(Vector3.down * Physics.gravity.magnitude * (fallGravityMultiplier - 1f),
+                         ForceMode.Acceleration);
+    }
+
+    // -----------------------------------------------------------------------
+    // SALTO
+
     private void HandleJump()
     {
-        // Coyote time: si acaba de salir de una plataforma, dar una ventana para saltar
-        if (_cc.isGrounded)
+        if (_jumpBuffered && _coyoteTimer > 0f)
         {
-            _velocity.y = -2f;         // Pequeno valor negativo para que isGrounded funcione
-            _coyoteTimer = coyoteTime;  // Resetear el timer al estar en el suelo
-        }
-        else
-        {
-            _coyoteTimer -= Time.deltaTime; // Descontar tiempo en el aire
-        }
+            // Resetear Y antes del impulso para salto consistente
+            _rb.linearVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+            _rb.AddForce(Vector3.up * jumpForce, ForceMode.Impulse);
+            _coyoteTimer = 0f;
 
-        // Saltar si: hay coyote time disponible (en suelo o recien salido)
-        if (Input.GetButtonDown("Jump") && _coyoteTimer > 0f)
-        {
-            _velocity.y = Mathf.Sqrt(jumpHeight * -2f * gravity);
-            _coyoteTimer = 0f; // Consumir el coyote time para no saltar dos veces
+            Debug.Log("[PlayerController] Salto ejecutado.");
+
             if (_animator != null) _animator.SetTrigger("Jump");
             SoundManager.Instance.PlaySound("Jump");
         }
-
-        if (_animator != null) _animator.SetBool("IsGrounded", _cc.isGrounded);
+        _jumpBuffered = false;
     }
 
     // -----------------------------------------------------------------------
+    // DASH
+
     private void HandleDash()
     {
         _dashCooldownTimer -= Time.deltaTime;
@@ -116,28 +216,22 @@ public class PlayerController : MonoBehaviour
         if (_isDashing)
         {
             _dashTimer -= Time.deltaTime;
-            float dashSpeed = dashDistance / dashDuration;
-            _cc.Move(_dashDir * dashSpeed * Time.deltaTime);
-
             if (_dashTimer <= 0f)
+            {
                 _isDashing = false;
-
+                // Frenar un poco al terminar el dash
+                _rb.linearVelocity *= 0.6f;
+            }
+            _dashBuffered = false;
             return;
         }
 
-        if (Input.GetKeyDown(KeyCode.LeftShift) && _dashCooldownTimer <= 0f)
+        if (_dashBuffered && _dashCooldownTimer <= 0f)
         {
-            float h = Input.GetAxisRaw("Horizontal");
-            float v = Input.GetAxisRaw("Vertical");
+            Vector3 dashDir = _moveDir.magnitude > 0.1f ? _moveDir : transform.forward;
 
-            Vector3 camForward = _cam.transform.forward;
-            Vector3 camRight = _cam.transform.right;
-            camForward.y = 0f;
-            camRight.y = 0f;
-
-            _dashDir = (camForward.normalized * v + camRight.normalized * h).normalized;
-            if (_dashDir == Vector3.zero)
-                _dashDir = transform.forward;
+            _rb.linearVelocity = new Vector3(_rb.linearVelocity.x, 0f, _rb.linearVelocity.z);
+            _rb.AddForce(dashDir * dashForce, ForceMode.Impulse);
 
             _isDashing = true;
             _dashTimer = dashDuration;
@@ -146,14 +240,37 @@ public class PlayerController : MonoBehaviour
             if (_animator != null) _animator.SetTrigger("Dash");
             SoundManager.Instance.PlaySound("Dash");
         }
+        _jumpBuffered = false;
+        _dashBuffered = false;
     }
 
     // -----------------------------------------------------------------------
-    private void ApplyGravity()
-    {
-        if (!_isDashing)
-            _velocity.y += gravity * Time.deltaTime;
+    // ANIMATOR
 
-        _cc.Move(new Vector3(0f, _velocity.y, 0f) * Time.deltaTime);
+    private void UpdateAnimator()
+    {
+        if (_animator == null) return;
+        _animator.SetFloat("Speed", _moveDir.magnitude);
+    }
+
+    // -----------------------------------------------------------------------
+    // TELEPORT (usado por PlayerStats y GameManager al respawnear)
+
+    public void Teleport(Vector3 position)
+    {
+        _rb.linearVelocity = Vector3.zero;
+        _rb.angularVelocity = Vector3.zero;
+        transform.position = position;
+    }
+
+    // -----------------------------------------------------------------------
+    // DEBUG: esfera de deteccion de suelo en Scene View
+
+    private void OnDrawGizmosSelected()
+    {
+        if (_col == null) _col = GetComponent<CapsuleCollider>();
+        Gizmos.color = _isGrounded ? Color.green : Color.red;
+        Vector3 origin = transform.position + Vector3.up * (_col != null ? _col.radius : 0.3f);
+        Gizmos.DrawWireSphere(origin + Vector3.down * groundCheckDistance, groundCheckRadius);
     }
 }

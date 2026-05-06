@@ -2059,7 +2059,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   target: {fileID: 379478777}
   offset: {x: 0, y: 4, z: -8}
-  smoothSpeed: 10
+  smoothTime: 0.08
   mouseSensitivity: 3
   minPitch: -15
   maxPitch: 55
@@ -2142,12 +2142,12 @@ GameObject:
   - component: {fileID: 379478776}
   - component: {fileID: 379478775}
   - component: {fileID: 379478774}
-  - component: {fileID: 379478773}
   - component: {fileID: 379478772}
   - component: {fileID: 379478771}
   - component: {fileID: 379478770}
-  - component: {fileID: 379478769}
   - component: {fileID: 379478778}
+  - component: {fileID: 379478779}
+  - component: {fileID: 379478780}
   m_Layer: 0
   m_Name: Player
   m_TagString: Player
@@ -2155,28 +2155,6 @@ GameObject:
   m_NavMeshLayer: 0
   m_StaticEditorFlags: 0
   m_IsActive: 1
---- !u!95 &379478769
-Animator:
-  serializedVersion: 7
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 379478768}
-  m_Enabled: 1
-  m_Avatar: {fileID: 0}
-  m_Controller: {fileID: 0}
-  m_CullingMode: 0
-  m_UpdateMode: 0
-  m_ApplyRootMotion: 0
-  m_LinearVelocityBlending: 0
-  m_StabilizeFeet: 0
-  m_AnimatePhysics: 0
-  m_WarningMessage: 
-  m_HasTransformHierarchy: 1
-  m_AllowConstantClipSamplingOptimization: 1
-  m_KeepAnimatorStateOnDisable: 0
-  m_WriteDefaultValuesOnDisable: 0
 --- !u!114 &379478770
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2204,7 +2182,7 @@ MonoBehaviour:
   gridSize: 2
   buildLayerMask:
     serializedVersion: 2
-    m_Bits: 9
+    m_Bits: 4294967295
 --- !u!114 &379478771
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2232,38 +2210,20 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   moveSpeed: 6
+  acceleration: 60
+  groundDrag: 8
   rotationSpeed: 15
-  jumpHeight: 2.5
-  gravity: -20
-  coyoteTime: 0.15
-  dashDistance: 6
-  dashDuration: 0.15
-  dashCooldown: 1.5
---- !u!143 &379478773
-CharacterController:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 379478768}
-  m_Material: {fileID: 0}
-  m_IncludeLayers:
+  jumpForce: 30
+  fallGravityMultiplier: 2.5
+  coyoteTime: 0.12
+  dashForce: 20
+  dashDuration: 0.12
+  dashCooldown: 1
+  groundMask:
     serializedVersion: 2
-    m_Bits: 0
-  m_ExcludeLayers:
-    serializedVersion: 2
-    m_Bits: 0
-  m_LayerOverridePriority: 0
-  m_ProvidesContacts: 0
-  m_Enabled: 1
-  serializedVersion: 3
-  m_Height: 2
-  m_Radius: 0.5
-  m_SlopeLimit: 45
-  m_StepOffset: 0.3
-  m_SkinWidth: 0.08
-  m_MinMoveDistance: 0.001
-  m_Center: {x: 0, y: 0, z: 0}
+    m_Bits: 8
+  groundCheckRadius: 0.3
+  groundCheckDistance: 0.1
 --- !u!136 &379478774
 CapsuleCollider:
   m_ObjectHideFlags: 0
@@ -2368,7 +2328,64 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 39642cabc043ab04ea02cf7d00ad0f50, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  initialSpawn: {fileID: 0}
+  initialSpawn: {fileID: 398077910}
+--- !u!54 &379478779
+Rigidbody:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 379478768}
+  serializedVersion: 4
+  m_Mass: 1
+  m_Drag: 0
+  m_AngularDrag: 0.05
+  m_CenterOfMass: {x: 0, y: 0, z: 0}
+  m_InertiaTensor: {x: 1, y: 1, z: 1}
+  m_InertiaRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_IncludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ExcludeLayers:
+    serializedVersion: 2
+    m_Bits: 0
+  m_ImplicitCom: 1
+  m_ImplicitTensor: 1
+  m_UseGravity: 1
+  m_IsKinematic: 0
+  m_Interpolate: 1
+  m_Constraints: 112
+  m_CollisionDetection: 1
+--- !u!114 &379478780
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 379478768}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 62899f850307741f2a39c98a8b639597, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  m_Actions: {fileID: -944628639613478452, guid: 052faaac586de48259a63d0c4782560b, type: 3}
+  m_NotificationBehavior: 0
+  m_UIInputModule: {fileID: 0}
+  m_DeviceLostEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_DeviceRegainedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ControlsChangedEvent:
+    m_PersistentCalls:
+      m_Calls: []
+  m_ActionEvents: []
+  m_NeverAutoSwitchControlSchemes: 0
+  m_DefaultControlScheme: 
+  m_DefaultActionMap: 
+  m_SplitScreenIndex: -1
+  m_Camera: {fileID: 0}
 --- !u!1 &398077909
 GameObject:
   m_ObjectHideFlags: 0
@@ -5647,7 +5664,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0, y: 0}
   m_AnchorMax: {x: 1, y: 1}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: -13}
   m_SizeDelta: {x: 0, y: 0}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1161601668
@@ -8387,7 +8404,7 @@ RectTransform:
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
   m_AnchorMin: {x: 0.5, y: 0.5}
   m_AnchorMax: {x: 0.5, y: 0.5}
-  m_AnchoredPosition: {x: 0, y: 0}
+  m_AnchoredPosition: {x: 0, y: 62.6}
   m_SizeDelta: {x: 160, y: 30}
   m_Pivot: {x: 0.5, y: 0.5}
 --- !u!114 &1822761467

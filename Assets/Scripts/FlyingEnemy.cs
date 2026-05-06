@@ -21,16 +21,17 @@ public class FlyingEnemy : MonoBehaviour
     [Tooltip("Que tan rapido flota")]
     public float floatFrequency = 1.5f;
 
-    private Animator  _animator;
+    // Animator es opcional: si no hay uno en el objeto, el enemigo igual se mueve
+    private Animator _animator;
     private Transform _currentTarget;
-    private float     _baseY; // Altura de referencia para el flotado
+    private float _baseY;
 
     // -----------------------------------------------------------------------
     private void Awake()
     {
-        _animator      = GetComponent<Animator>();
+        _animator = GetComponent<Animator>(); // puede ser null, esta bien
         _currentTarget = pointB;
-        _baseY         = transform.position.y;
+        _baseY = transform.position.y;
     }
 
     private void Update()
@@ -47,7 +48,7 @@ public class FlyingEnemy : MonoBehaviour
     private void Patrol()
     {
         // Mover en XZ hacia el target
-        Vector3 myPos     = new Vector3(transform.position.x, 0f, transform.position.z);
+        Vector3 myPos = new Vector3(transform.position.x, 0f, transform.position.z);
         Vector3 targetPos = new Vector3(_currentTarget.position.x, 0f, _currentTarget.position.z);
 
         Vector3 moved = Vector3.MoveTowards(myPos, targetPos, speed * Time.deltaTime);
@@ -61,8 +62,8 @@ public class FlyingEnemy : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, 8f * Time.deltaTime);
         }
 
-        // Enviar velocidad al Animator
-        _animator.SetFloat("Speed", speed);
+        // Enviar velocidad al Animator (solo si existe)
+        if (_animator != null) _animator.SetFloat("Speed", speed);
 
         // Si llego al target, cambiar al otro punto y actualizar altura base
         float dist = Vector2.Distance(new Vector2(transform.position.x, transform.position.z),

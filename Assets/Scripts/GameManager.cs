@@ -13,15 +13,19 @@ public class GameManager : MonoBehaviour
     [Tooltip("Cantidad total de monedas que hay en el nivel (contar a mano en el inspector)")]
     public int totalCoins = 0;
 
+    [Header("Referencia al Jugador")]
+    [Tooltip("Arrastrar el GameObject del Player aqui")]
+    public PlayerStats player;
+
     // --- Estado interno ---
-    private int   _coinsCollected = 0;
-    private float _inkSpent       = 0f;
-    private float _timer          = 0f;
-    private bool  _levelActive    = false;
-    private bool  _isPaused       = false;
+    private int _coinsCollected = 0;
+    private float _inkSpent = 0f;
+    private float _timer = 0f;
+    private bool _levelActive = false;
+    private bool _isPaused = false;
 
     // --- Propiedades publicas de solo lectura ---
-    public bool IsGamePaused  => _isPaused;
+    public bool IsGamePaused => _isPaused;
     public bool IsLevelActive => _levelActive;
 
     // -----------------------------------------------------------------------
@@ -55,11 +59,27 @@ public class GameManager : MonoBehaviour
     // -----------------------------------------------------------------------
     // METODOS PUBLICOS
 
-    /// <summary>Llamado desde el boton "Jugar" del panel de inicio.</summary>
+    /// <summary>
+    /// Llamado desde el boton "Jugar" del panel de inicio.
+    /// Reposiciona al jugador en el spawn inicial antes de activar el nivel.
+    /// </summary>
     public void StartLevel()
     {
+        // CORRECCION: mover al jugador al spawn antes de empezar
+        if (player != null)
+        {
+            CharacterController cc = player.GetComponent<CharacterController>();
+            cc.enabled = false;
+            player.transform.position = SpawnManager.Instance.GetRespawnPoint();
+            cc.enabled = true;
+        }
+        else
+        {
+            Debug.LogWarning("[GameManager] No hay referencia al Player. Asignarlo en el Inspector.");
+        }
+
         _levelActive = true;
-        _isPaused    = false;
+        _isPaused = false;
         Time.timeScale = 1f;
         UIManager.Instance.ShowHUD();
     }

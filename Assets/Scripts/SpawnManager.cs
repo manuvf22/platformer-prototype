@@ -32,9 +32,14 @@ public class SpawnManager : MonoBehaviour
     public Vector3 GetRespawnPoint()
     {
         if (_currentSpawn != null)
+        {
+            Debug.Log($"[SpawnManager] Spawneando en: {_currentSpawn.position}");
             return _currentSpawn.position;
+        }
 
-        Debug.LogWarning("[SpawnManager] No hay spawn activo! Usando Vector3.zero.");
-        return Vector3.zero;
+        // Fallback: si initialSpawn no fue asignado en el Inspector,
+        // usar la posicion de este mismo GameObject como spawn.
+        Debug.LogWarning("[SpawnManager] initialSpawn es NULL. Revisa el Inspector. Usando posicion del SpawnManager.");
+        return transform.position;
     }
 }

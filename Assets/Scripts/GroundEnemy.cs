@@ -14,14 +14,15 @@ public class GroundEnemy : MonoBehaviour
     public Transform pointB;
     public float speed = 2.5f;
 
-    private Animator  _animator;
-    private Transform _currentTarget; // Hacia donde va ahora
+    // Animator es opcional: si no hay uno en el objeto, el enemigo igual se mueve
+    private Animator _animator;
+    private Transform _currentTarget;
 
     // -----------------------------------------------------------------------
     private void Awake()
     {
-        _animator      = GetComponent<Animator>();
-        _currentTarget = pointB; // Empieza yendo hacia B
+        _animator = GetComponent<Animator>(); // puede ser null, esta bien
+        _currentTarget = pointB;
     }
 
     private void Update()
@@ -48,8 +49,8 @@ public class GroundEnemy : MonoBehaviour
             transform.rotation = Quaternion.Slerp(transform.rotation, targetRot, 10f * Time.deltaTime);
         }
 
-        // Enviar velocidad al Animator
-        _animator.SetFloat("Speed", speed);
+        // Enviar velocidad al Animator (solo si existe)
+        if (_animator != null) _animator.SetFloat("Speed", speed);
 
         // Si llego al target, cambiar al otro punto
         float dist = Vector3.Distance(transform.position, targetPos);

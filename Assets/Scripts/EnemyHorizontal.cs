@@ -5,21 +5,23 @@ public class EnemyHorizontal : MonoBehaviour
     public float speed = 3f;
     public float distance = 4f;
 
-    private Vector3 startPos;
-    private int direction = 1;
+    private Vector3 pointA;
+    private Vector3 pointB;
+    private Vector3 target;
 
     void Start()
     {
-        startPos = transform.position;
+        pointA = transform.position + Vector3.right * distance;
+        pointB = transform.position - Vector3.right * distance;
+        target = pointA;
     }
 
     void Update()
     {
-        transform.Translate(Vector3.right * speed * direction * Time.deltaTime);
+        transform.position = Vector3.MoveTowards(transform.position, target, speed * Time.deltaTime);
 
-        float traveled = transform.position.x - startPos.x;
-        if (traveled >= distance || traveled <= -distance)
-            direction *= -1;
+        if (Vector3.Distance(transform.position, target) < 0.05f)
+            target = target == pointA ? pointB : pointA;
     }
 
     void OnCollisionEnter(Collision other)

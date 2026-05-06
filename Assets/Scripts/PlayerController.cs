@@ -6,8 +6,9 @@ public class PlayerController : MonoBehaviour
     [Header("Movement")]
     public float moveSpeed = 7f;
     public float jumpForce = 6f;
-    public float dashForce = 15f;
+    public float dashForce = 25f;
     public float dashCooldown = 1f;
+    public float fallGravityMultiplier = 20f;
 
     [Header("Ground Check")]
     public Transform groundCheck;
@@ -17,6 +18,7 @@ public class PlayerController : MonoBehaviour
     private Rigidbody rb;
     private bool isGrounded;
     private bool canDash = true;
+    private bool isDashing = false;
     private Camera cam;
 
     void Start()
@@ -39,6 +41,11 @@ public class PlayerController : MonoBehaviour
 
     void FixedUpdate()
     {
+        if (!isGrounded)
+            rb.AddForce(Vector3.down * fallGravityMultiplier, ForceMode.Acceleration);
+
+        if (isDashing) return;
+
         float h = Input.GetAxisRaw("Horizontal");
         float v = Input.GetAxisRaw("Vertical");
 
@@ -58,10 +65,17 @@ public class PlayerController : MonoBehaviour
     System.Collections.IEnumerator Dash()
     {
         canDash = false;
+        isDashing = true;
+
         Vector3 dashDir = cam.transform.forward;
         dashDir.y = 0f;
         dashDir.Normalize();
-        rb.AddForce(dashDir * dashForce, ForceMode.Impulse);
+
+        rb.linearVelocity = dashDir * dashForce;
+
+        yield return new WaitForSeconds(0.2f);
+        isDashing = false;
+
         yield return new WaitForSeconds(dashCooldown);
         canDash = true;
     }

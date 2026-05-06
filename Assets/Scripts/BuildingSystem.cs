@@ -1,208 +1,136 @@
 using UnityEngine;
 
-/// <summary>
-/// Sistema de construccion estilo Fortnite:
-/// - Presionar B para activar/desactivar modo construccion.
-/// - Teclas 1, 2, 3 para elegir la estructura (plataforma, pared, rampa).
-/// - Se muestra un fantasma transparente donde quedaria.
-/// - Click izquierdo para colocar (gasta tinta).
-/// - Q / E para rotar la estructura.
-/// </summary>
 public class BuildingSystem : MonoBehaviour
 {
-    // -------------------------------------------------
-    // Clase interna que describe cada tipo de estructura
-    [System.Serializable]
-    public class Structure
+    [Header("Estructuras")]
+    public GameObject rampPrefab;
+    public GameObject platformPrefab;
+    public GameObject wallPrefab;
+
+    [Header("Grid")]
+    public float gridSize = 2f;
+    public float buildDistance = 4f;
+
+    [Header("Material Costo")]
+    public int costPerStructure = 5;
+
+    private bool buildMode = false;
+    private int selectedIndex = -1;
+    private GameObject previewObj;
+    private GameObject[] prefabs;
+    private float currentRotation = 0f;
+    private Camera cam;
+
+    void Start()
     {
-        public string     name;     // Ej: "Plataforma"
-        public GameObject prefab;   // Prefab real que se instancia
-        public float      inkCost;  // Tinta que cuesta construirla
+        cam = Camera.main;
+        prefabs = new GameObject[] { rampPrefab, platformPrefab, wallPrefab };
     }
 
-    [Header("Estructuras disponibles (llenar en inspector)")]
-    public Structure[] structures;   // Agregar 3 estructuras: piso, pared, rampa
-
-    [Header("Materiales")]
-    [Tooltip("Material transparente azulado para el fantasma")]
-    public Material ghostMaterial;
-
-    [Header("Configuracion")]
-    public float buildRange  = 8f;  // Distancia maxima para colocar
-    public float gridSize    = 2f;  // Tamano de la grilla de snap
-
-    [Tooltip("Capas sobre las que se puede construir (ej: Default, Ground)")]
-    public LayerMask buildLayerMask;
-
-    // --- Estado interno ---
-    private int        _selectedIndex = 0;
-    private GameObject _ghostObject;
-    private bool       _buildMode     = false;
-    private float      _ghostRotY     = 0f;   // Rotacion en Y del fantasma
-    private Camera     _cam;
-
-    // -----------------------------------------------------------------------
-    private void Awake()
-    {
-        _cam = Camera.main;
-    }
-
-    private void Update()
-    {
-        if (GameManager.Instance.IsGamePaused || !GameManager.Instance.IsLevelActive) return;
-
-        HandleModeToggle();
-
-        if (_buildMode)
-        {
-            HandleStructureSelection();
-            HandleRotation();
-            UpdateGhostPreview();
-            HandlePlacement();
-        }
-    }
-
-    // -----------------------------------------------------------------------
-    // ACTIVAR / DESACTIVAR MODO CONSTRUCCION
-
-    private void HandleModeToggle()
+    void Update()
     {
         if (Input.GetKeyDown(KeyCode.B))
-        {
-            _buildMode = !_buildMode;
-            UIManager.Instance.ShowBuildUI(_buildMode);
+            ToggleBuildMode();
 
-            if (_buildMode)
-                SpawnGhost();
-            else
-                DestroyGhost();
-        }
+        if (!buildMode) return;
+
+        if (Input.GetKeyDown(KeyCode.Alpha1)) SelectStructure(0);
+        if (Input.GetKeyDown(KeyCode.Alpha2)) SelectStructure(1);
+        if (Input.GetKeyDown(KeyCode.Alpha3)) SelectStructure(2);
+
+        if (Input.GetKeyDown(KeyCode.Q)) currentRotation -= 90f;
+        if (Input.GetKeyDown(KeyCode.E)) currentRotation += 90f;
+
+        UpdatePreview();
+
+        if (Input.GetMouseButtonDown(0) && previewObj != null)
+            PlaceStructure();
     }
 
-    // -----------------------------------------------------------------------
-    // SELECCIONAR ESTRUCTURA (teclas 1-2-3...)
-
-    private void HandleStructureSelection()
+    void ToggleBuildMode()
     {
-        for (int i = 0; i < structures.Length; i++)
+        buildMode = !buildMode;
+        if (!buildMode)
         {
-            if (Input.GetKeyDown(KeyCode.Alpha1 + i))
-            {
-                _selectedIndex = i;
-                _ghostRotY     = 0f;
-                SpawnGhost();
-            }
+            if (previewObj != null) Destroy(previewObj);
+            previewObj = null;
+            selectedIndex = -1;
         }
+        UIManager.Instance.UpdateBuildUI(buildMode, selectedIndex);
     }
 
-    // -----------------------------------------------------------------------
-    // ROTAR LA ESTRUCTURA CON Q / E
-
-    private void HandleRotation()
+    void SelectStructure(int index)
     {
-        if (Input.GetKeyDown(KeyCode.Q)) _ghostRotY -= 90f;
-        if (Input.GetKeyDown(KeyCode.E)) _ghostRotY += 90f;
+        selectedIndex = index;
+        if (previewObj != null) Destroy(previewObj);
 
-        if (_ghostObject != null)
-            _ghostObject.transform.rotation = Quaternion.Euler(0f, _ghostRotY, 0f);
+        previewObj = Instantiate(prefabs[index]);
+        SetPreviewMaterial(previewObj);
+        UIManager.Instance.UpdateBuildUI(buildMode, selectedIndex);
     }
 
-    // -----------------------------------------------------------------------
-    // ACTUALIZAR POSICION DEL FANTASMA
-
-    private void UpdateGhostPreview()
+    void SetPreviewMaterial(GameObject obj)
     {
-        if (_ghostObject == null) return;
-
-        // Raycast desde el centro de la pantalla hacia adelante
-        Ray ray = _cam.ScreenPointToRay(new Vector3(Screen.width / 2f, Screen.height / 2f));
-
-        if (Physics.Raycast(ray, out RaycastHit hit, buildRange, buildLayerMask))
+        foreach (Renderer r in obj.GetComponentsInChildren<Renderer>())
         {
-            // Snap a la grilla
-            Vector3 snapped = new Vector3(
-                Mathf.Round(hit.point.x / gridSize) * gridSize,
-                Mathf.Round(hit.point.y / gridSize) * gridSize,
-                Mathf.Round(hit.point.z / gridSize) * gridSize
-            );
+            Material m = new Material(r.material);
+            Color c = m.color;
+            c.a = 0.4f;
+            m.color = c;
+            m.SetFloat("_Surface", 1);
+            m.renderQueue = 3000;
+            r.material = m;
+        }
 
-            _ghostObject.transform.position = snapped;
-            _ghostObject.SetActive(true);
-        }
-        else
-        {
-            // Si no hay superficie valida, ocultar el fantasma
-            _ghostObject.SetActive(false);
-        }
+        Collider col = obj.GetComponent<Collider>();
+        if (col != null) col.enabled = false;
     }
 
-    // -----------------------------------------------------------------------
-    // COLOCAR LA ESTRUCTURA
-
-    private void HandlePlacement()
+    void UpdatePreview()
     {
-        // Click izquierdo para colocar
-        if (Input.GetMouseButtonDown(0) && _ghostObject != null && _ghostObject.activeSelf)
-        {
-            Structure s = structures[_selectedIndex];
+        if (previewObj == null) return;
 
-            if (PlayerStats.Instance.TrySpendInk(s.inkCost))
-            {
-                // Instanciar la estructura real en la posicion del fantasma
-                Instantiate(s.prefab, _ghostObject.transform.position, _ghostObject.transform.rotation);
-                SoundManager.Instance.PlaySound("Build");
-            }
-            else
-            {
-                // No habia suficiente tinta
-                UIManager.Instance.ShowNotEnoughInk();
-            }
-        }
+        Vector3 spawnPos = transform.position + cam.transform.forward * 4f;
+        spawnPos.y = transform.position.y;
+
+        Vector3 snapped = SnapToGrid(spawnPos);
+        previewObj.transform.position = snapped;
+        previewObj.transform.rotation = GetStructureRotation();
     }
 
-    // -----------------------------------------------------------------------
-    // CREAR / DESTRUIR FANTASMA
-
-    private void SpawnGhost()
+    Quaternion GetStructureRotation()
     {
-        DestroyGhost();
-        if (structures == null || structures.Length == 0) return;
-
-        // Instanciar el prefab como fantasma
-        _ghostObject = Instantiate(structures[_selectedIndex].prefab);
-        _ghostObject.name = "Ghost_" + structures[_selectedIndex].name;
-
-        // Reemplazar todos los materiales por el material transparente
-        foreach (Renderer rend in _ghostObject.GetComponentsInChildren<Renderer>())
+        if (selectedIndex == 0) // Rampa
         {
-            Material[] mats = new Material[rend.materials.Length];
-            for (int i = 0; i < mats.Length; i++)
-                mats[i] = ghostMaterial;
-            rend.materials = mats;
+            Quaternion baseRot = prefabs[0].transform.rotation;
+            Quaternion yRot = Quaternion.Euler(0f, currentRotation, 0f);
+            return yRot * baseRot;
         }
-
-        // Eliminar colisiones del fantasma (solo visual)
-        foreach (Collider col in _ghostObject.GetComponentsInChildren<Collider>())
-            Destroy(col);
-
-        // Eliminar cualquier script en el fantasma
-        foreach (MonoBehaviour mb in _ghostObject.GetComponentsInChildren<MonoBehaviour>())
-            Destroy(mb);
-
-        _ghostObject.SetActive(false);
+        return Quaternion.Euler(0f, currentRotation, 0f);
     }
 
-    private void DestroyGhost()
+    Vector3 SnapToGrid(Vector3 pos)
     {
-        if (_ghostObject != null)
-        {
-            Destroy(_ghostObject);
-            _ghostObject = null;
-        }
+        float x = Mathf.Round(pos.x / gridSize) * gridSize;
+        float y = Mathf.Round(pos.y / gridSize) * gridSize;
+        float z = Mathf.Round(pos.z / gridSize) * gridSize;
+        return new Vector3(x, y, z);
     }
 
-    private void OnDestroy()
+    void PlaceStructure()
     {
-        DestroyGhost();
+        if (!GameManager.Instance.SpendMaterials(costPerStructure))
+        {
+            Debug.Log("Sin materiales suficientes");
+            return;
+        }
+
+        Instantiate(prefabs[selectedIndex],
+            previewObj.transform.position,
+            GetStructureRotation());
+
+        GameManager.Instance.AddStructure();
+        UIManager.Instance.UpdateHUD();
+        UIManager.Instance.UpdateBuildUI(buildMode, selectedIndex);
     }
 }

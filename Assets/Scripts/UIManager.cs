@@ -1,167 +1,127 @@
-using System.Collections;
 using UnityEngine;
-using UnityEngine.UI;
 using TMPro;
 
-/// <summary>
-/// Controla toda la UI del juego:
-/// - Panel de inicio
-/// - HUD (timer, monedas, tinta, modo construccion)
-/// - Panel de pausa
-/// - Panel de nivel completado
-/// 
-/// Todos los campos se asignan en el Inspector arrastrando los objetos de la jerarquia.
-/// </summary>
 public class UIManager : MonoBehaviour
 {
     public static UIManager Instance;
 
-    // -----------------------------------------------------------------------
-    [Header("Paneles Principales")]
-    public GameObject startPanel;
-    public GameObject pausePanel;
-    public GameObject levelCompletePanel;
+    [Header("Panels")]
+    public GameObject menuPanel;
     public GameObject hudPanel;
+    public GameObject pausePanel;
+    public GameObject levelEndPanel;
 
-    // -----------------------------------------------------------------------
-    [Header("HUD - Elementos")]
-    [Tooltip("Texto del timer, ej: 01:23")]
-    public TextMeshProUGUI timerText;
-
-    [Tooltip("Texto de monedas, ej: Monedas: 3/10")]
+    [Header("HUD")]
     public TextMeshProUGUI coinsText;
-
-    [Tooltip("Slider de barra de tinta")]
-    public Slider inkSlider;
-
-    [Tooltip("Texto con valor numerico de tinta")]
-    public TextMeshProUGUI inkValueText;
-
-    [Tooltip("Texto que dice 'MODO CONSTRUCCION' cuando esta activo")]
+    public TextMeshProUGUI materialsText;
     public TextMeshProUGUI buildModeText;
+    public TextMeshProUGUI checkpointText;
 
-    [Tooltip("Panel/botonera con los tipos de estructura disponibles")]
-    public GameObject buildUIPanel;
+    [Header("Level End")]
+    public TextMeshProUGUI deathsText;
+    public TextMeshProUGUI timeText;
+    public TextMeshProUGUI coinsEndText;
+    public TextMeshProUGUI structuresText;
 
-    [Tooltip("Mensaje 'Tinta insuficiente!' que aparece brevemente")]
-    public TextMeshProUGUI noInkMessageText;
+    private float checkpointMessageTimer = 0f;
+    private bool showingCheckpoint = false;
 
-    // -----------------------------------------------------------------------
-    [Header("Panel Nivel Completado")]
-    public TextMeshProUGUI completionTimeText;
-    public TextMeshProUGUI inkSpentText;
-    public TextMeshProUGUI coinsResultText;
-
-    // -----------------------------------------------------------------------
-    private Coroutine _noInkCoroutine;
-
-    // -----------------------------------------------------------------------
-    private void Awake()
+    void Awake()
     {
-        Instance = this;
+        if (Instance == null) Instance = this;
+        else Destroy(gameObject);
     }
 
-    private void Start()
+    void Start()
     {
-        HideAll();
-    }
-
-    // -----------------------------------------------------------------------
-    // METODOS DE NAVEGACION DE PANELES
-
-    private void HideAll()
-    {
-        startPanel.SetActive(false);
-        pausePanel.SetActive(false);
-        levelCompletePanel.SetActive(false);
+        menuPanel.SetActive(true);
         hudPanel.SetActive(false);
-        buildUIPanel.SetActive(false);
-
-        if (noInkMessageText) noInkMessageText.gameObject.SetActive(false);
-        if (buildModeText)    buildModeText.text = "";
+        pausePanel.SetActive(false);
+        levelEndPanel.SetActive(false);
+        Time.timeScale = 0f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
     }
 
-    /// <summary>Mostrar pantalla de inicio (antes de que empiece el nivel).</summary>
-    public void ShowStartPanel()
+    void Update()
     {
-        HideAll();
-        startPanel.SetActive(true);
-    }
+        if (Input.GetKeyDown(KeyCode.Escape))
+            TogglePause();
 
-    /// <summary>Mostrar HUD normal durante el juego.</summary>
-    public void ShowHUD()
-    {
-        HideAll();
-        hudPanel.SetActive(true);
-    }
-
-    /// <summary>Mostrar u ocultar panel de pausa (mantiene el HUD visible debajo).</summary>
-    public void ShowPausePanel(bool show)
-    {
-        pausePanel.SetActive(show);
-    }
-
-    /// <summary>Mostrar pantalla de nivel completado con estadisticas.</summary>
-    public void ShowLevelComplete(float time, float inkSpent, int coins, int totalCoins)
-    {
-        HideAll();
-        levelCompletePanel.SetActive(true);
-
-        // Formatear tiempo como MM:SS
-        int minutes = Mathf.FloorToInt(time / 60f);
-        int seconds = Mathf.FloorToInt(time % 60f);
-        completionTimeText.text = $"Tiempo: {minutes:00}:{seconds:00}";
-
-        inkSpentText.text    = $"Tinta gastada: {inkSpent:F0}";
-        coinsResultText.text = $"Monedas: {coins}/{totalCoins}";
-    }
-
-    // -----------------------------------------------------------------------
-    // METODOS DE ACTUALIZACION DEL HUD
-
-    public void UpdateTimer(float time)
-    {
-        int minutes = Mathf.FloorToInt(time / 60f);
-        int seconds = Mathf.FloorToInt(time % 60f);
-        if (timerText) timerText.text = $"{minutes:00}:{seconds:00}";
-    }
-
-    public void UpdateCoins(int collected, int total)
-    {
-        if (coinsText) coinsText.text = $"Monedas: {collected}/{total}";
-    }
-
-    public void UpdateInk(float current, float max)
-    {
-        if (inkSlider)    inkSlider.value    = max > 0 ? current / max : 0f;
-        if (inkValueText) inkValueText.text  = $"Tinta: {current:F0}/{max:F0}";
-    }
-
-    // -----------------------------------------------------------------------
-    // CONSTRUCCION
-
-    /// <summary>Activa o desactiva la UI del modo construccion.</summary>
-    public void ShowBuildUI(bool show)
-    {
-        buildUIPanel.SetActive(show);
-        if (buildModeText)
-            buildModeText.text = show ? "[ MODO CONSTRUCCION ]" : "";
-    }
-
-    /// <summary>Muestra brevemente el mensaje de tinta insuficiente.</summary>
-    public void ShowNotEnoughInk()
-    {
-        if (_noInkCoroutine != null) StopCoroutine(_noInkCoroutine);
-        _noInkCoroutine = StartCoroutine(NotEnoughInkRoutine());
-    }
-
-    private IEnumerator NotEnoughInkRoutine()
-    {
-        if (noInkMessageText)
+        if (showingCheckpoint)
         {
-            noInkMessageText.gameObject.SetActive(true);
-            yield return new WaitForSeconds(1.5f);
-            noInkMessageText.gameObject.SetActive(false);
+            checkpointMessageTimer -= Time.deltaTime;
+            if (checkpointMessageTimer <= 0f)
+            {
+                checkpointText.gameObject.SetActive(false);
+                showingCheckpoint = false;
+            }
         }
+    }
+
+    public void StartGame()
+    {
+        menuPanel.SetActive(false);
+        hudPanel.SetActive(true);
+        pausePanel.SetActive(false);
+        levelEndPanel.SetActive(false);
+        Time.timeScale = 1f;
+        Cursor.lockState = CursorLockMode.Locked;
+        Cursor.visible = false;
+        GameManager.Instance.StartLevel();
+        UpdateHUD();
+    }
+
+    public void TogglePause()
+    {
+        if (menuPanel.activeSelf || levelEndPanel.activeSelf) return;
+
+        bool paused = !pausePanel.activeSelf;
+        pausePanel.SetActive(paused);
+        hudPanel.SetActive(!paused);
+        Time.timeScale = paused ? 0f : 1f;
+        Cursor.lockState = paused ? CursorLockMode.None : CursorLockMode.Locked;
+        Cursor.visible = paused;
+    }
+
+    public void ShowLevelEndPanel()
+    {
+        levelEndPanel.SetActive(true);
+        hudPanel.SetActive(false);
+        pausePanel.SetActive(false);
+        Time.timeScale = 0f;
+        Cursor.lockState = CursorLockMode.None;
+        Cursor.visible = true;
+
+        deathsText.text = "Muertes: " + GameManager.Instance.deaths;
+        timeText.text = "Tiempo: " + Mathf.FloorToInt(GameManager.Instance.timeElapsed) + "s";
+        coinsEndText.text = "Coins: " + GameManager.Instance.coins;
+        structuresText.text = "Estructuras: " + GameManager.Instance.structuresBuilt;
+    }
+
+    public void UpdateHUD()
+    {
+        coinsText.text = "Coins: " + GameManager.Instance.coins;
+        materialsText.text = "Materiales: " + GameManager.Instance.materials;
+    }
+
+    public void UpdateBuildUI(bool active, int index)
+    {
+        if (!active)
+        {
+            buildModeText.text = "";
+            return;
+        }
+        string[] names = { "Rampa", "Plataforma", "Pared" };
+        string selected = index >= 0 && index < names.Length ? names[index] : "Ninguna";
+        buildModeText.text = "CONSTRUCCION | " + selected;
+    }
+
+    public void ShowCheckpointMessage()
+    {
+        checkpointText.gameObject.SetActive(true);
+        checkpointText.text = "Punto de Respawn guardado";
+        checkpointMessageTimer = 2f;
+        showingCheckpoint = true;
     }
 }
